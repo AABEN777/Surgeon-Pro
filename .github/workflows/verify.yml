@@ -1,0 +1,61 @@
+name: Verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "What to run"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - scoring-only
+          - discover-chain-ids
+          - test-adapters
+      target:
+        description: "Optional target for test-adapters (chain name or CA)"
+        required: false
+        type: string
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Syntax check
+        run: |
+          python3 -c "
+          import ast, pathlib, sys
+          bad = 0
+          for p in sorted(pathlib.Path('.').rglob('*.py')):
+              try:
+                  ast.parse(p.read_text()); print('OK   ', p)
+              except SyntaxError as e:
+                  bad = 1; print('FAIL ', p, e)
+          sys.exit(bad)
+          "
+
+      - name: Scoring tests
+        if: inputs.task == 'both' || inputs.task == 'scoring-only'
+        run: python3 test_scoring.py
+
+      - name: Discover chain identifiers
+        if: inputs.task == 'both' || inputs.task == 'discover-chain-ids'
+        run: python3 discover_chain_ids.py
+
+      - name: Test adapters
+        if: inputs.task == 'both' || inputs.task == 'test-adapters'
+        run: python3 test_adapters.py ${{ inputs.target }}
