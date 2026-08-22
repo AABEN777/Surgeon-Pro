@@ -297,7 +297,7 @@ MARKET_HOURS_ADJUST = {
 
 # ── CONVICTION SCORING ────────────────────────────────────────────
 CONVICTION = {
-    "momentum":   {"EXPLOSIVE": 15, "REAL": 10, "WEAK": 3, "FAKE": 0},
+    "momentum":   {"EXPLOSIVE": 23, "REAL": 11, "WEAK": 3, "FAKE": 0},  # Pro: data-driven boost
     "launch":     {"GOLDEN_WINDOW": 15, "SWEET_SPOT": 10, "TOO_EARLY": -10,
                    "LATE": -5, "OLD": -5},
     "change_1h":  [(100, 15), (50, 10), (20, 5)],       # (threshold, points)
@@ -305,7 +305,7 @@ CONVICTION = {
     "age_sweet":  [((0.17, 0.5), 10), ((0.5, 1.0), 7)],
     "liquidity":  [(20_000, 10), (15_000, 5)],
     "social":     {3: 20, 2: 12, 1: 5},                  # unique channels
-    "smart_money":{2: 20, 1: 12},                        # unique wallets
+    "smart_money":{2: 24, 1: 14},  # Pro: higher weight for confirmed wallets                        # unique wallets
     # Was -25, which combined with muting punished the same fact twice and
     # pushed these below the tracking floor — discarding the outcome data on
     # the group that produces most of the rugs. Muting decides whether it
@@ -477,56 +477,48 @@ VELOCITY_MIN_CHANNELS   = 2      # weighted channels for consensus
 # trims the least-supported calls.
 SOCIAL_CALL_LIMIT       = 20
 
-# ── POSITION WATCH (signal-only, no execution) ────────────────────
 WATCH = {
-    "tp1_pct":             50,
-    "tp2_pct":            100,
-    "tp3_pct":            200,
-    # Warning and grading are separate jobs. On the VPS they had to be the
-    # same moment because the bot was exiting; signal-only means we can warn
-    # early while the trade is still actionable, then grade once the outcome
-    # is actually settled — and learn whether early dips recover.
-    "stop_warn_pct":      -15,   # notify, keep watching
-    "stop_loss_pct":      -35,   # grade it, stop watching
-    "stop_grace_minutes":  20,   # no grading inside this window, warning only
+    # ── Surgeon-Pro Exit Overhaul ──────────────────────────────────
+    # Driven by 1,409 closed trades:
+    # VOLUME_FADE: avg final +80.3, giveback 19, 100% green
+    # TRAIL_STOP:  avg final -8.9,  giveback 128 → largest leak
 
-    # Trailing arms on any meaningful gain, not just after TP2. wDELLx ran
-    # +45%, never reached TP1 at +50%, and gave back everything with nothing
-    # firing on the way down.
-    # Measured as the fraction of the gain surrendered, not drawdown from
-    # peak price. 40% off a +45% peak is break-even; 40% off a +500% peak is
-    # still a large win. The same number cannot mean both.
-    "trail_arm_pct":         25,   # peak gain needed to arm
-    "give_back_ratio":      0.65,  # surrender this much of the gain -> exit
-    "give_back_after_tp2":  0.35,  # tighter once TP2 is banked
-    "time_stop_hours":      2,   # exit alert if still negative
-    "time_exit_hours":      4,   # exit alert if still flat
-    "max_hold_hours":       8,
-    # Volume fade closed at +78% against a +101% peak; trailing closed at
-    # -21% against a +95% peak, on the same average high. Momentum dies
-    # before price does, so lean on the leading indicator.
-    "volume_fade_ratio":  0.45,
-    "volume_fade_min_pnl":  10,
-    "dev_sold_fraction":   0.5,   # deployer shedding this much of its bag
+    "tp1_pct":             70,    # soft first take
+    "tp2_pct":            140,
+    "tp3_pct":            250,
+
+    "stop_warn_pct":      -15,
+    "stop_loss_pct":      -35,
+    "stop_grace_minutes":  20,
+
+    # Trailing — much wider. Only tighten on real monsters.
+    "trail_arm_pct":         60,     # was 25 — let it breathe
+    "give_back_ratio":      0.48,    # was 0.65 — still wide
+    "give_back_after_big":  0.32,    # tighter only after peak >= 200%
+    "give_back_after_tp2":  0.38,    # moderate once TP2 hit
+
+    "time_stop_hours":      2.5,
+    "time_exit_hours":      5,
+    "max_hold_hours":      10,      # slightly longer for runners
+
+    # Volume Fade — now the primary profitable exit
+    "volume_fade_ratio":   0.42,    # slightly more sensitive
+    "volume_fade_min_pnl":  35,     # require real profit before fading
+
+    "dev_sold_fraction":   0.5,
     "whale_recheck_hours":   2,
     "whale_recheck_min_pnl": 30,
     "whale_top_holder_pct":  30,
     "graduation_bc_pct":     60,
-    "max_open_positions":    25,  # tracking cap
-    # Inherited from the autonomous version, where pausing after losses
-    # protected capital. Signal-only, it just goes quiet while King is the
-    # one deciding what to trade — and two losers at a ~20% win rate is an
-    # ordinary afternoon, not a reason to miss the next runner.
+    "max_open_positions":    25,
     "cooloff_losses":         5,
     "cooloff_minutes":       20,
-    # A parked token that has failed the gates this many times is not going
-    # to turn. Holding it costs a re-check slot a fresher token could use.
     "max_watchlist_checks":   12,
-    # A position cannot lose more than everything, and a reading above this
-    # is a broken entry price rather than a moonshot. Seven such rows put
-    # the average final PnL at 124 million percent.
     "pnl_floor_pct":       -100.0,
     "pnl_ceiling_pct":   10_000.0,
+
+    # New protective floor: once peak has been strong, never trail below this
+    "hard_floor_after_peak": 25,    # never exit a former +80%+ below +25%
 }
 
 # ── DEDUPE ────────────────────────────────────────────────────────
