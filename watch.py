@@ -170,24 +170,37 @@ def evaluate_position(row: dict, market, adapter, fired: set[str],
             out.append(("GRADUATION",
                         f"bonding curve ~{bc_pct:.0f}% — approaching graduation"))
 
-    # -- stops -----------------------------------------------------
+       # -- stops (Surgeon-Pro improved trailing) ---------------------
+    # Data-driven: Volume Fade is the best exit. Trailing is now much wider
+    # and only tightens after real monsters. Hard floor protects former winners.
     took_tp2 = "TP2" in fired or any(e == "TP2" for e, _ in out)
     armed = peak_pnl >= W["trail_arm_pct"]
-    ratio = W["give_back_after_tp2"] if took_tp2 else W["give_back_ratio"]
+
+    if peak_pnl >= 200:
+        ratio = W.get("give_back_after_big", 0.32)
+    elif took_tp2:
+        ratio = W.get("give_back_after_tp2", 0.38)
+    else:
+        ratio = W["give_back_ratio"]
+
     floor = peak_pnl * (1 - ratio)
+
+    # Hard protective floor: once we have seen a strong peak, never trail
+    # all the way back to small profits or losses.
+    hard_floor = W.get("hard_floor_after_peak", 25)
+    if peak_pnl >= 80:
+        floor = max(floor, hard_floor)
 
     if armed and pnl <= floor:
         given = 100 * (peak_pnl - pnl) / peak_pnl if peak_pnl else 0
         out.append(("TRAIL_STOP",
                     f"gave back {given:.0f}% of a {peak_pnl:+.0f}% peak, "
-                    f"now {pnl:+.0f}%"))
+                    f"now {pnl:+.0f}% (Pro wider trail)"))
     elif not armed:
         held_minutes = held_hours * 60
         if pnl <= W["stop_warn_pct"] and "STOP_WARN" not in fired:
             out.append(("STOP_WARN",
                         f"down {pnl:.0f}% since signal — still watching"))
-        # Grading waits: a token minutes old swings on ordinary noise, and
-        # closing it as a loss there records a verdict we have not earned.
         if pnl <= W["stop_loss_pct"] and held_minutes >= W["stop_grace_minutes"]:
             out.append(("STOP_LOSS",
                         f"down {pnl:.0f}% after {held_minutes:.0f}m"))
