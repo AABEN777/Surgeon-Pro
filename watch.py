@@ -145,7 +145,7 @@ def evaluate_position(row: dict, market, adapter, fired: set[str],
             out.append(("WHALE_STOP",
                         f"top holder now {top:.0f}% — concentration built after entry"))
 
-        # -- Volume Fade (Surgeon-Pro strengthened) --------------------
+            # -- Volume Fade (Surgeon-Pro strengthened) --------------------
     # Data showed this is by far the best exit. We now require more profit
     # before allowing it, and react faster to real volume collapse.
     if "VOLUME_FADE" not in fired and pnl >= W["volume_fade_min_pnl"]:
@@ -160,6 +160,54 @@ def evaluate_position(row: dict, market, adapter, fired: set[str],
                 out.append(("VOLUME_FADE",
                             f"5m volume {vol_5m:,.0f} vs {hourly_avg:,.0f} hourly avg "
                             f"+ price momentum cooling — locking in {pnl:+.0f}%"))
+
+    # -- graduation: hold rather than exit -------------------------
+    GRADUATED_DEXES = {"pumpswap", "raydium", "meteora", "orca", "uniswap",
+                       "pancakeswap"}
+    graduating = False
+    on_curve = (market.launchpad == "pumpfun"
+                and (market.dex or "").lower() not in GRADUATED_DEXES)
+    if on_curve and market.fdv > 0:
+        bc_pct = min(100.0, market.fdv / 85_000 * 100)
+        graduating = bc_pct >= W["graduation_bc_pct"]
+        if graduating and "GRADUATION" not in fired:
+            out.append(("GRADUATION",
+                        f"bonding curve ~{bc_pct:.0f}% — approaching graduation"))
+
+    # -- stops (Surgeon-Pro improved trailing) ---------------------
+    # Data-driven: Volume Fade is the best exit. Trailing is now much wider
+    # and only tightens after real monsters. Hard floor protects former winners.
+    took_tp2 = "TP2" in fired or any(e == "TP2" for e, _ in out)
+    armed = peak_pnl >= W["trail_arm_pct"]
+
+    if peak_pnl >= 200:
+        ratio = W.get("give_back_after_big", 0.32)
+    elif took_tp2:
+        ratio = W.get("give_back_after_tp2", 0.38)
+    else:
+        ratio = W["give_back_ratio"]
+
+    floor = peak_pnl * (1 - ratio)
+
+    # Hard protective floor: once we have seen a strong peak, never trail
+    # all the way back to small profits or losses.
+    hard_floor = W.get("hard_floor_after_peak", 25)
+    if peak_pnl >= 80:
+        floor = max(floor, hard_floor)
+
+    if armed and pnl <= floor:
+        given = 100 * (peak_pnl - pnl) / peak_pnl if peak_pnl else 0
+        out.append(("TRAIL_STOP",
+                    f"gave back {given:.0f}% of a {peak_pnl:+.0f}% peak, "
+                    f"now {pnl:+.0f}% (Pro wider trail)"))
+    elif not armed:
+        held_minutes = held_hours * 60
+        if pnl <= W["stop_warn_pct"] and "STOP_WARN" not in fired:
+            out.append(("STOP_WARN",
+                        f"down {pnl:.0f}% since signal — still watching"))
+        if pnl <= W["stop_loss_pct"] and held_minutes >= W["stop_grace_minutes"]:
+            out.append(("STOP_LOSS",
+                        f"down {pnl:.0f}% after {held_minutes:.0f}m"))
 
     # -- graduation: hold rather than exit -------------------------
     # Only meaningful for a token still on a bonding curve. FDV divided by
