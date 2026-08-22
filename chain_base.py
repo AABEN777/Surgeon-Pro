@@ -559,6 +559,50 @@ def is_infrastructure_holder(addr: str, tag: str = "",
     return bool(low) and any(k in low for k in NON_HOLDER_TAGS)
 
 
+# Solana programs and vaults that hold supply by design. RugCheck's insider
+# tag catches wallets funded together at launch; it does not catch the AMM.
+SOLANA_INFRASTRUCTURE = {
+    "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1",   # Raydium AMM authority
+    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8",   # Raydium AMM v4
+    "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP",   # Orca whirlpool
+    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",    # Orca whirlpool program
+    "Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB",   # Meteora pools
+    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo",    # Meteora DLMM
+    "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",    # Pump.fun fee account
+    "39azUYFWPz3VHgKCf3VChUwbpURdCHRxjWVowf5jUJjg",   # Pump.fun authority
+    "TSLvdd1pWpHVjahSpsvCXUbgwsL3JAcvokwaKt1eokM",    # Token program authority
+    "1nc1nerator11111111111111111111111111111111",    # burn
+    "11111111111111111111111111111111",               # system program
+}
+
+# Substrings in a RugCheck holder's owner label that mean "not a person".
+SOLANA_NON_HOLDER_TAGS = (
+    "raydium", "orca", "meteora", "pump", "whirlpool", "openbook", "serum",
+    "jupiter", "phoenix", "lifinity", "amm", "pool", "vault", "lp ",
+    "liquidity", "market", "program", "burn", "incinerator",
+    "binance", "coinbase", "okx", "bybit", "kraken", "bitget", "gate",
+)
+
+
+def is_solana_infrastructure(holder: dict) -> bool:
+    """
+    True when a Solana "holder" is really a pool, program, vault or exchange.
+
+    RugCheck's insider tag catches wallets funded together before launch. It
+    does not catch the AMM — and most of a young token's float sits in the
+    pool by design, so counting it makes a healthy launch read as heavily
+    concentrated. This is the same fault that made a Uniswap pair look like a
+    50% whale on EVM, which was fixed there and never mirrored here.
+    """
+    for field in ("address", "owner", "account"):
+        value = str(holder.get(field) or "")
+        if value in SOLANA_INFRASTRUCTURE:
+            return True
+    label = " ".join(str(holder.get(f) or "").lower()
+                     for f in ("owner_name", "name", "tag", "label", "type"))
+    return bool(label.strip()) and any(k in label for k in SOLANA_NON_HOLDER_TAGS)
+
+
 def market_sanity(m: "TokenMarket") -> list[str]:
     """
     Reasons this market snapshot should not be trusted.

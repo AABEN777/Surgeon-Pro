@@ -13,6 +13,7 @@ from typing import Optional
 
 import config
 from chain_base import (
+    is_solana_infrastructure,
     ChainAdapter, SafetyReport, CreatorActivity,
     http_get, safe_float, safe_int,
 )
@@ -89,7 +90,14 @@ class SolanaAdapter(ChainAdapter):
         if not holders:
             rep.unavailable.extend(["top_holder_pct", "top10_pct"])
         else:
-            outside = [h for h in holders if not h.get("insider")]
+            # Insider-tagged wallets are excluded from concentration, and so
+            # are pools, programs and exchange accounts — most of a young
+            # token's float sits in the AMM by design.
+            infra = [h for h in holders if is_solana_infrastructure(h)]
+            outside = [h for h in holders
+                       if not h.get("insider") and not is_solana_infrastructure(h)]
+            if infra:
+                rep.flags.append(f"excluded_{len(infra)}_infra_holders")
             # Insider supply was filtered out of concentration and then
             # discarded — it is the clearest bundling tell in the response.
             insiders = [h for h in holders if h.get("insider")]
