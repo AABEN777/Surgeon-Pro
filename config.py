@@ -502,8 +502,8 @@ WATCH = {
     "max_hold_hours":      10,      # slightly longer for runners
 
     # Volume Fade — now the primary profitable exit
-    "volume_fade_ratio":   0.42,    # slightly more sensitive
-    "volume_fade_min_pnl":  35,     # require real profit before fading
+    "volume_fade_ratio":   0.38,    # more sensitive (was 0.42)
+"volume_fade_min_pnl":  45,     # require better profit before fading (was 35)
 
     "dev_sold_fraction":   0.5,
     "whale_recheck_hours":   2,
