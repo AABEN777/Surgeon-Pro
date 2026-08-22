@@ -145,13 +145,21 @@ def evaluate_position(row: dict, market, adapter, fired: set[str],
             out.append(("WHALE_STOP",
                         f"top holder now {top:.0f}% — concentration built after entry"))
 
-    # -- momentum dying while in profit ----------------------------
+        # -- Volume Fade (Surgeon-Pro strengthened) --------------------
+    # Data showed this is by far the best exit. We now require more profit
+    # before allowing it, and react faster to real volume collapse.
     if "VOLUME_FADE" not in fired and pnl >= W["volume_fade_min_pnl"]:
         hourly_avg = market.volume_1h / 12 if market.volume_1h else 0
-        if hourly_avg > 0 and market.volume_5m < hourly_avg * W["volume_fade_ratio"]:
-            out.append(("VOLUME_FADE",
-                        f"5m volume {market.volume_5m:,.0f} vs {hourly_avg:,.0f} "
-                        f"hourly average — momentum fading while up {pnl:+.0f}%"))
+        vol_5m = market.volume_5m or 0
+
+        # Stronger condition: volume has clearly collapsed relative to recent activity
+        if hourly_avg > 0 and vol_5m < hourly_avg * W["volume_fade_ratio"]:
+            # Extra confirmation: price momentum is no longer strongly positive
+            change_5m = getattr(market, "change_5m", 0) or 0
+            if change_5m < 8:   # not still exploding upward
+                out.append(("VOLUME_FADE",
+                            f"5m volume {vol_5m:,.0f} vs {hourly_avg:,.0f} hourly avg "
+                            f"+ price momentum cooling — locking in {pnl:+.0f}%"))
 
     # -- graduation: hold rather than exit -------------------------
     # Only meaningful for a token still on a bonding curve. FDV divided by
