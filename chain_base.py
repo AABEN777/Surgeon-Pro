@@ -577,14 +577,45 @@ SOLANA_INFRASTRUCTURE = {
 
 # Substrings in a RugCheck holder's owner label that mean "not a person".
 SOLANA_NON_HOLDER_TAGS = (
-    "raydium", "orca", "meteora", "pump", "whirlpool", "openbook", "serum",
+    "raydium", "orca", "meteora", "pump", "pumpswap", "pumpfun", "bonding",
+    "whirlpool", "openbook", "serum", "moonshot", "fluxbeam", "damm", "dlmm",
     "jupiter", "phoenix", "lifinity", "amm", "pool", "vault", "lp ",
     "liquidity", "market", "program", "burn", "incinerator",
     "binance", "coinbase", "okx", "bybit", "kraken", "bitget", "gate",
 )
 
 
-def is_solana_infrastructure(holder: dict) -> bool:
+def solana_pool_accounts(markets) -> set[str]:
+    """
+    Every account belonging to this token's own pools.
+
+    Hardcoded programme addresses cannot catch PumpSwap or any modern AMM,
+    because their pools are per-token derived accounts — a fresh address for
+    every launch. But RugCheck reports the token's markets, and the vaults
+    holding its liquidity are named right there. Reading them out is the same
+    thing EVM does with pair_address, generalised.
+    """
+    accounts: set[str] = set()
+    for m in (markets or []):
+        if not isinstance(m, dict):
+            continue
+        for key in ("pubkey", "marketPubkey", "liquidityA", "liquidityB",
+                    "baseVault", "quoteVault", "vaultA", "vaultB",
+                    "liquidityAAccount", "liquidityBAccount"):
+            v = m.get(key)
+            if isinstance(v, str) and v:
+                accounts.add(v)
+        lp = m.get("lp")
+        if isinstance(lp, dict):
+            for key in ("lpMint", "baseMint", "quoteMint", "lpCurrentSupply",
+                        "holders", "lpLockedPct"):
+                v = lp.get(key)
+                if isinstance(v, str) and v:
+                    accounts.add(v)
+    return accounts
+
+
+def is_solana_infrastructure(holder: dict, pool_accounts=None) -> bool:
     """
     True when a Solana "holder" is really a pool, program, vault or exchange.
 
@@ -594,9 +625,10 @@ def is_solana_infrastructure(holder: dict) -> bool:
     concentrated. This is the same fault that made a Uniswap pair look like a
     50% whale on EVM, which was fixed there and never mirrored here.
     """
-    for field in ("address", "owner", "account"):
+    known = SOLANA_INFRASTRUCTURE | set(pool_accounts or ())
+    for field in ("address", "owner", "account", "pubkey"):
         value = str(holder.get(field) or "")
-        if value in SOLANA_INFRASTRUCTURE:
+        if value and value in known:
             return True
     label = " ".join(str(holder.get(f) or "").lower()
                      for f in ("owner_name", "name", "tag", "label", "type"))

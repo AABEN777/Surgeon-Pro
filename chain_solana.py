@@ -13,7 +13,7 @@ from typing import Optional
 
 import config
 from chain_base import (
-    is_solana_infrastructure,
+    is_solana_infrastructure, solana_pool_accounts,
     ChainAdapter, SafetyReport, CreatorActivity,
     http_get, safe_float, safe_int,
 )
@@ -86,6 +86,11 @@ class SolanaAdapter(ChainAdapter):
                     rep.hard_rejects.append("creator_rug_history")
 
         # -- holder distribution ----------------------------------
+        # The token's own pool vaults, read from its markets. PumpSwap and
+        # every modern AMM derive a fresh pool address per token, so no
+        # hardcoded list can catch them.
+        pool_accounts = solana_pool_accounts(data.get("markets"))
+
         holders = data.get("topHolders")
         if not holders:
             rep.unavailable.extend(["top_holder_pct", "top10_pct"])
@@ -93,9 +98,11 @@ class SolanaAdapter(ChainAdapter):
             # Insider-tagged wallets are excluded from concentration, and so
             # are pools, programs and exchange accounts — most of a young
             # token's float sits in the AMM by design.
-            infra = [h for h in holders if is_solana_infrastructure(h)]
+            infra = [h for h in holders
+                     if is_solana_infrastructure(h, pool_accounts)]
             outside = [h for h in holders
-                       if not h.get("insider") and not is_solana_infrastructure(h)]
+                       if not h.get("insider")
+                       and not is_solana_infrastructure(h, pool_accounts)]
             if infra:
                 rep.flags.append(f"excluded_{len(infra)}_infra_holders")
             # Insider supply was filtered out of concentration and then
