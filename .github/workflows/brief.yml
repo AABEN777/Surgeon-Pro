@@ -1,0 +1,53 @@
+name: Brief
+
+# One message each morning with the state of Surgeon. A number nobody thinks
+# to check is a number that drifts — boosted sending nothing for days,
+# dev-sold never firing, unproven matching nothing at all were each invisible
+# until someone happened to ask.
+on:
+  schedule:
+    - cron: "5 7 * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: "Window to report on"
+        required: false
+        default: "24"
+        type: string
+      send:
+        description: "Deliver to Telegram"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: surgeon-brief
+  cancel-in-progress: false
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.SURGEON_ALERTS_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:   ${{ secrets.SURGEON_ALERTS_CHAT_ID }}
+      SUPABASE_URL:       ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY:       ${{ secrets.SUPABASE_KEY }}
+      HELIUS_API_KEY:     ${{ secrets.HELIUS_API_KEY }}
+      PYTHONUNBUFFERED:   "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compose and send
+        run: |
+          python3 brief.py --hours ${{ inputs.hours || '24' }} \
+            ${{ (inputs.send == false) && ' ' || '--send' }}
